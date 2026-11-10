@@ -1,0 +1,33 @@
+{
+  "name": "scanner74",
+  "productName": "Scanner 74",
+  "version": "1.0.0",
+  "description": "الماسح 74 — ماسح مستندات شخصي",
+  "main": "main.js",
+  "author": "Bilal Hadi Jawad",
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.bilal.scanner74",
+    "productName": "Scanner 74",
+    "files": ["main.js", "app/**/*"],
+    "directories": { "output": "dist", "buildResources": "build" },
+    "win": {
+      "icon": "app/icons/icon-512.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "الماسح 74",
+      "artifactName": "Scanner74-Setup.${ext}"
+    },
+    "portable": {
+      "artifactName": "Scanner74-Portable.${ext}"
+    }
+  }
+}

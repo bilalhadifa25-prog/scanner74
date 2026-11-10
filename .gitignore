@@ -1,0 +1,8 @@
+node_modules/
+desktop/dist/
+desktop/app/
+cap/
+_to_delete/
+*.zip
+*.keystore
+*.jks
