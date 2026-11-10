@@ -1,0 +1,117 @@
+name: Build apps (Android + Windows)
+
+on:
+  push:
+    branches: [main]
+    paths: ['index.html', 'styles.css', 'js/**', 'desktop/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+
+      - name: Collect the web app
+        run: |
+          mkdir -p cap/www
+          cp -r index.html styles.css sw.js manifest.webmanifest js fonts icons cap/www/
+
+      - name: Create the Android project
+        working-directory: cap
+        run: |
+          npm init -y > /dev/null
+          npm i @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/filesystem@7 @capacitor/share@7
+          npx cap init "الماسح 74" com.bilal.scanner74 --web-dir www
+          npx cap add android
+          # camera access for the scanner
+          sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />#' android/app/src/main/AndroidManifest.xml
+          grep -n "CAMERA" android/app/src/main/AndroidManifest.xml
+          # app icon
+          rm -rf android/app/src/main/res/mipmap-anydpi-v26
+          for d in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+            n=${d%%:*}; s=${d##*:}
+            cp ../icons/icon-192.png android/app/src/main/res/mipmap-$n/ic_launcher.png
+            cp android/app/src/main/res/mipmap-$n/ic_launcher.png android/app/src/main/res/mipmap-$n/ic_launcher_round.png
+          done
+          # dark splash background
+          find android/app/src/main/res -name 'styles.xml' -exec sed -i 's#@drawable/splash#@android:color/black#' {} \;
+          npx cap sync android
+
+      - name: Build and sign the APK
+        working-directory: cap/android
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          $BT/zipalign -f 4 app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
+          if [ -n "$KEYSTORE_B64" ]; then
+            # your own key (repository secret) keeps the signature the same, so updates install over the old app
+            echo "$KEYSTORE_B64" | base64 -d > release.keystore; PASS="$KEYSTORE_PASS"
+          else
+            # no secret yet: a one-off key for this build only
+            PASS=$(openssl rand -hex 16)
+            keytool -genkeypair -keystore release.keystore -storepass "$PASS" -keypass "$PASS" -alias scanner74 -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Scanner 74, C=IQ"
+          fi
+          export PASS
+          ALIAS=$(keytool -list -keystore release.keystore -storepass "$PASS" | awk -F, '/PrivateKeyEntry/{print $1; exit}')
+          $BT/apksigner sign --ks release.keystore --ks-key-alias "$ALIAS" --ks-pass env:PASS --key-pass env:PASS --out ../../Scanner74.apk aligned.apk
+          rm -f release.keystore
+          $BT/apksigner verify ../../Scanner74.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: android-apk, path: Scanner74.apk }
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Collect the web app
+        shell: bash
+        run: |
+          mkdir -p desktop/app
+          cp -r index.html styles.css sw.js manifest.webmanifest js fonts icons desktop/app/
+      - name: Build the Windows installer
+        working-directory: desktop
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm install
+          npx electron-builder --win nsis portable --publish never
+          ls dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-app
+          path: |
+            desktop/dist/*.exe
+
+  release:
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - run: ls -la out
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: الماسح 74 — آخر إصدار
+          body: |
+            - **Scanner74.apk** — نسخة أندرويد (ثبّتها مباشرة على الهاتف)
+            - **Scanner74-Setup.exe** — مثبّت ويندوز
+            - **Scanner74-Portable.exe** — نسخة ويندوز تعمل دون تثبيت
+            - نسخة الآيفون والويب: افتح رابط GitHub Pages في Safari ثم «إضافة إلى الشاشة الرئيسية»
+          files: out/*
+          make_latest: true
