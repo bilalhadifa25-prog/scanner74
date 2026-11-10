@@ -13,8 +13,14 @@
   "build": {
     "appId": "com.bilal.scanner74",
     "productName": "Scanner 74",
-    "files": ["main.js", "app/**/*"],
-    "directories": { "output": "dist", "buildResources": "build" },
+    "files": [
+      "main.js",
+      "app/**/*"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
     "win": {
       "icon": "app/icons/icon-512.png"
     },
@@ -28,6 +34,8 @@
     },
     "portable": {
       "artifactName": "Scanner74-Portable.${ext}"
-    }
-  }
+    },
+    "publish": null
+  },
+  "repository": "https://github.com/bilalhadifa25-prog/scanner74"
 }
